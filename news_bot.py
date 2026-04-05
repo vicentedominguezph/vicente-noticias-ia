@@ -193,12 +193,13 @@ def obtener_contenido(url):
 
 
 # ══════════════════════════════════════════════════════════
-# PASO 4 — Resumir y analizar con Gemini
+# PASO 4 — Resumir y analizar con Groq
 # ══════════════════════════════════════════════════════════
 def resumir_con_groq(articulos):
     if not GROQ_API_KEY:
         print("\n  ⚠ GROQ_API_KEY no configurada. Usando resúmenes RSS como fallback.")
         for art in articulos:
+            art["titulo_es"]  = art["titulo"]
             art["resumen_es"] = art["resumen_rss"] or "Contenido no disponible."
             art["analisis"]   = "Configura GROQ_API_KEY para obtener análisis automático."
         return articulos
@@ -212,28 +213,26 @@ def resumir_con_groq(articulos):
         bloques.append(
             f"ARTICULO {i}\n"
             f"Fuente: {art['fuente']}\n"
-            f"Titulo: {art['titulo']}\n"
+            f"Titulo original: {art['titulo']}\n"
             f"URL: {art['link']}\n"
             f"Contenido:\n{contenido}\n"
         )
 
     prompt = (
         "Eres un analista estratégico senior especializado en inteligencia artificial empresarial. "
-        "A continuación tienes 5 artículos recientes sobre uso de IA en empresas a nivel mundial.\n\n"
+        "A continuacion tienes 5 articulos recientes sobre uso de IA en empresas a nivel mundial.\n\n"
         + "\n---\n".join(bloques)
         + "\n\n"
-        "Para CADA artículo entrega exactamente este JSON (sin markdown, solo el array):\n"
-        '[\n'
-        '  {\n'
-        '    "num": 1,\n'
-        '    "resumen": "Resumen en español de 4-5 oraciones que capture los puntos clave, '
-        'cifras, empresas y contexto. Claro y directo.",\n'
-        '    "analisis": "Comentario analítico propio de 3-4 oraciones en español sobre '
-        'las implicancias estratégicas para empresas que adoptan IA: qué significa, '
-        'qué oportunidad o riesgo representa, y qué deberían considerar los ejecutivos."\n'
-        '  }\n'
-        "]\n"
-        "Responde SOLO con el JSON array, sin texto adicional."
+        "Responde con un objeto JSON que tenga una clave 'articles' con un array de 5 elementos. "
+        "Para CADA articulo incluye:\n"
+        "- num: numero del articulo (1 al 5)\n"
+        "- titulo_es: titulo traducido al espanol (claro y natural)\n"
+        "- resumen: resumen en espanol de 4-5 oraciones con los puntos clave, cifras y contexto\n"
+        "- analisis: comentario analitico de 3-4 oraciones sobre implicancias estrategicas para "
+        "empresas que adoptan IA: que significa, que oportunidad o riesgo representa, "
+        "y que deberian considerar los ejecutivos\n\n"
+        "Formato exacto: {\"articles\": [{\"num\": 1, \"titulo_es\": \"...\", "
+        "\"resumen\": \"...\", \"analisis\": \"...\"}, ...]}"
     )
 
     try:
@@ -241,23 +240,25 @@ def resumir_con_groq(articulos):
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
+            response_format={"type": "json_object"},
         )
         raw = response.choices[0].message.content.strip()
-        # Limpiar posible markdown
-        raw = re.sub(r"```(?:json)?", "", raw).strip().rstrip("`").strip()
-        resultados = json.loads(raw)
+        data = json.loads(raw)
+        resultados = data.get("articles", data.get("articulos", []))
         for r in resultados:
             idx = r["num"] - 1
             if 0 <= idx < len(articulos):
+                articulos[idx]["titulo_es"]  = r.get("titulo_es", articulos[idx]["titulo"])
                 articulos[idx]["resumen_es"] = r.get("resumen", "")
                 articulos[idx]["analisis"]   = r.get("analisis", "")
-        print("  ✓ Groq completó resúmenes y análisis.")
+        print("  ✓ Groq completo resumenes y analisis.")
     except Exception as e:
         print(f"  ✗ Error con Groq API: {e}")
         for art in articulos:
             if "resumen_es" not in art:
+                art["titulo_es"]  = art["titulo"]
                 art["resumen_es"] = art["resumen_rss"]
-                art["analisis"]   = "Análisis no disponible."
+                art["analisis"]   = "Analisis no disponible."
 
     return articulos
 
@@ -289,7 +290,7 @@ def construir_html(articulos):
     for i, art in enumerate(articulos):
         color, texto_color = COLORES_FUENTE[i % len(COLORES_FUENTE)]
         fecha_pub = fmt_fecha(art.get("fecha"))
-        titulo_safe   = html.escape(art["titulo"])
+        titulo_safe   = html.escape(art.get("titulo_es", art["titulo"]))
         resumen_safe  = html.escape(art.get("resumen_es", art.get("resumen_rss", "")))
         analisis_safe = html.escape(art.get("analisis", ""))
         link   = art["link"]
