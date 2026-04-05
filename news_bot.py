@@ -7,11 +7,9 @@
 ╚══════════════════════════════════════════════════════════╝
 """
 
-import os, sys, re, time, html, json, smtplib
+import os, sys, re, time, html, json
 from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
 import feedparser
 import requests
@@ -22,13 +20,10 @@ from groq import Groq
 # ══════════════════════════════════════════════════════════
 # CONFIGURACIÓN  ← Edita estas variables o usa env vars
 # ══════════════════════════════════════════════════════════
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")   # console.groq.com → API key gratis
+GROQ_API_KEY  = os.environ.get("GROQ_API_KEY", "")   # console.groq.com
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")  # resend.com
 
-DESTINATARIO   = os.environ.get("DESTINATARIO", "vicente.dominguez@maindset.cl")
-SMTP_HOST      = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT      = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USER      = os.environ.get("SMTP_USER", "")       # tu cuenta Gmail (o la que uses)
-SMTP_PASSWORD  = os.environ.get("SMTP_PASSWORD", "")   # contraseña de app Gmail
+DESTINATARIO  = os.environ.get("DESTINATARIO", "vicente.dominguez@maindset.cl")
 
 DIAS_ATRAS     = 7
 TOP_N          = 5
@@ -530,35 +525,40 @@ def construir_html(articulos):
 
 
 # ══════════════════════════════════════════════════════════
-# PASO 6 — Enviar por SMTP
+# PASO 6 — Enviar con Resend
 # ══════════════════════════════════════════════════════════
 def enviar_email(html_body, articulos):
     fecha_asunto = datetime.now().strftime("%d %b %Y")
-    asunto = f"🤖 Radar IA Empresarial — {fecha_asunto}"
+    asunto = f"Radar IA Empresarial - {fecha_asunto}"
 
-    if not SMTP_USER or not SMTP_PASSWORD:
-        print("\n  ⚠ SMTP_USER o SMTP_PASSWORD no configurados.")
+    if not RESEND_API_KEY:
+        print("\n  ⚠ RESEND_API_KEY no configurada.")
         ruta_html = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ultimo_reporte.html")
         with open(ruta_html, "w", encoding="utf-8") as f:
             f.write(html_body)
         print(f"  ✓ Reporte guardado como: {ruta_html}")
         return
 
-    print(f"\n  Enviando correo a {DESTINATARIO}...")
+    print(f"\n  Enviando correo a {DESTINATARIO} via Resend...")
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = asunto
-        msg["From"]    = SMTP_USER
-        msg["To"]      = DESTINATARIO
-        msg.attach(MIMEText(html_body, "html", "utf-8"))
-
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            server.sendmail(SMTP_USER, DESTINATARIO, msg.as_string())
-
-        print(f"  ✓ Correo enviado exitosamente a {DESTINATARIO}")
+        resp = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from":    "Radar IA Empresarial <onboarding@resend.dev>",
+                "to":      [DESTINATARIO],
+                "subject": asunto,
+                "html":    html_body,
+            },
+            timeout=30,
+        )
+        if resp.status_code in (200, 201):
+            print(f"  ✓ Correo enviado exitosamente a {DESTINATARIO}")
+        else:
+            raise Exception(f"HTTP {resp.status_code}: {resp.text}")
     except Exception as e:
         print(f"  ✗ Error al enviar email: {e}")
         ruta_html = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ultimo_reporte.html")
