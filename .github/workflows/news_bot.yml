@@ -23,10 +23,7 @@ jobs:
 
       - name: Ejecutar news bot
         env:
-          GEMINI_API_KEY:  ${{ secrets.GEMINI_API_KEY }}
-          SMTP_USER:       ${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD:   ${{ secrets.SMTP_PASSWORD }}
-          SMTP_HOST:       ${{ secrets.SMTP_HOST }}
-          SMTP_PORT:       ${{ secrets.SMTP_PORT }}
-          DESTINATARIO:    ${{ secrets.DESTINATARIO }}
+          GROQ_API_KEY:   ${{ secrets.GROQ_API_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          DESTINATARIO:   ${{ secrets.DESTINATARIO }}
         run: python news_bot.py
